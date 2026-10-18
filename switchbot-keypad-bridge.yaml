@@ -1,0 +1,83 @@
+esphome:
+  name: switchbot-keypad-bridge
+
+esp32:
+  board: seeed_xiao_esp32s3
+  variant: esp32s3
+  flash_size: 8MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+external_components:
+  - source: github://pierluigizagaria/switchbot-keypad-bridge
+    components: [switchbot_keypad_bridge]
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+logger:
+  level: VERBOSE
+
+api:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# TLS in the setup wizard needs a valid system clock; SNTP keeps it set
+# even before Home Assistant connects.
+time:
+  - platform: sntp
+
+switchbot_keypad_bridge:
+  id: keypad_bridge
+  # Rearm Keypad Vision's passive face/palm unlock after each unlock.
+  # Default: 20s. Set 0s to rearm only on confirmed lock/door closure.
+  rearm_after: 20s
+
+  keypad_action:
+    name: "Action"
+
+  keypad:
+    name: "Keypad"
+
+  linked_lock:
+    name: "Lock"
+
+  # Keypad and linked lock battery are read from BLE advertisements by the
+  # shared background scan below.
+  keypad_battery_level:
+    name: "Keypad battery"
+  lock_battery_level:
+    name: "Lock battery"
+  # battery_scan_interval: 15min
+
+  reset_button:
+    name: "Reset"
+
+  on_unlock:
+    # method: "pin" | "fingerprint" | "nfc" | "face" | "palm" | "unknown"   index: credential slot
+    - homeassistant.event:
+        event: esphome.switchbot_keypad_unlock
+        data:
+          method: !lambda 'return method;'
+          index: !lambda 'return to_string(index);'
+  
+  # on_lock:
+  #   - logger.log: "Locked"
+
+  # on_doorbell:
+  #   - logger.log: "Doorbell pressed"
+
+# Optional button to manually rearm face/palm unlock using the same action.
+# button:
+#   - platform: template
+#     name: "Rearm keypad"
+#     icon: mdi:lock-check
+#     on_press:
+#       - switchbot_keypad_bridge.rearm: keypad_bridge
