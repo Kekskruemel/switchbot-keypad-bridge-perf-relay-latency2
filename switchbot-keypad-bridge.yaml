@@ -57,6 +57,13 @@ switchbot_keypad_bridge:
     name: "Lock battery"
   # battery_scan_interval: 15min
 
+  # Operate the linked physical lock from Home Assistant through this bridge's
+  # own BLE connection (no second connection from an ESPHome Bluetooth proxy).
+  unlock_button:
+    name: "Unlock"
+  lock_button:
+    name: "Lock"
+
   reset_button:
     name: "Reset"
 

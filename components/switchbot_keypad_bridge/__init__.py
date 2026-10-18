@@ -56,6 +56,8 @@ CONF_LOCK_BATTERY_LEVEL = "lock_battery_level"
 CONF_BATTERY_SCAN_INTERVAL = "battery_scan_interval"
 CONF_REARM_AFTER = "rearm_after"
 CONF_RESET_BUTTON = "reset_button"
+CONF_UNLOCK_BUTTON = "unlock_button"
+CONF_LOCK_BUTTON = "lock_button"
 CONF_ON_LOCK = "on_lock"
 CONF_ON_UNLOCK = "on_unlock"
 CONF_ON_DOORBELL = "on_doorbell"
@@ -74,6 +76,10 @@ SwitchbotKeypadBridge = switchbot_keypad_bridge_ns.class_(
     "SwitchbotKeypadBridge", cg.Component
 )
 ResetButton = switchbot_keypad_bridge_ns.class_("ResetButton", button.Button)
+UnlockButton = switchbot_keypad_bridge_ns.class_("UnlockButton", button.Button)
+LockButton = switchbot_keypad_bridge_ns.class_("LockButton", button.Button)
+UnlockAction = switchbot_keypad_bridge_ns.class_("UnlockAction", automation.Action)
+LockAction = switchbot_keypad_bridge_ns.class_("LockAction", automation.Action)
 RearmAction = switchbot_keypad_bridge_ns.class_("RearmAction", automation.Action)
 LockTrigger = switchbot_keypad_bridge_ns.class_(
     "LockTrigger", automation.Trigger.template()
@@ -145,6 +151,14 @@ CONFIG_SCHEMA = cv.Schema(
             ResetButton,
             entity_category=ENTITY_CATEGORY_CONFIG,
             icon="mdi:restart",
+        ),
+        cv.Optional(CONF_UNLOCK_BUTTON): button.button_schema(
+            UnlockButton,
+            icon="mdi:lock-open-variant",
+        ),
+        cv.Optional(CONF_LOCK_BUTTON): button.button_schema(
+            LockButton,
+            icon="mdi:lock",
         ),
         cv.GenerateID(CONF_PAIRING_UI_HTML_ID): cv.declare_id(cg.uint8),
         cv.Optional(CONF_ON_LOCK): automation.validate_automation(
@@ -218,6 +232,27 @@ async def rearm_to_code(config, action_id, template_arg, args):
     return cg.new_Pvariable(action_id, template_arg, parent)
 
 
+_LOCK_ACTION_SCHEMA = cv.maybe_simple_value(
+    {cv.Required(CONF_ID): cv.use_id(SwitchbotKeypadBridge)}, key=CONF_ID
+)
+
+
+@automation.register_action(
+    "switchbot_keypad_bridge.unlock", UnlockAction, _LOCK_ACTION_SCHEMA, synchronous=True
+)
+async def unlock_to_code(config, action_id, template_arg, args):
+    parent = await cg.get_variable(config[CONF_ID])
+    return cg.new_Pvariable(action_id, template_arg, parent)
+
+
+@automation.register_action(
+    "switchbot_keypad_bridge.lock", LockAction, _LOCK_ACTION_SCHEMA, synchronous=True
+)
+async def lock_to_code(config, action_id, template_arg, args):
+    parent = await cg.get_variable(config[CONF_ID])
+    return cg.new_Pvariable(action_id, template_arg, parent)
+
+
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
@@ -253,6 +288,14 @@ async def to_code(config):
         )
 
     if button_conf := config.get(CONF_RESET_BUTTON):
+        btn = await button.new_button(button_conf)
+        await cg.register_parented(btn, config[CONF_ID])
+
+    if button_conf := config.get(CONF_UNLOCK_BUTTON):
+        btn = await button.new_button(button_conf)
+        await cg.register_parented(btn, config[CONF_ID])
+
+    if button_conf := config.get(CONF_LOCK_BUTTON):
         btn = await button.new_button(button_conf)
         await cg.register_parented(btn, config[CONF_ID])
 

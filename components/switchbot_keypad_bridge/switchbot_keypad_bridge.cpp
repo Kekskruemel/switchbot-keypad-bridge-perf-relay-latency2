@@ -427,6 +427,9 @@ void ResetButton::press_action() {
   this->parent_->reset_pairing();
 }
 
+void UnlockButton::press_action() { this->parent_->unlock_lock(); }
+void LockButton::press_action() { this->parent_->lock_lock(); }
+
 void SwitchbotKeypadBridge::rearm() {
   this->keypad_state_.rearm();
   ESP_LOGI(TAG, "Reporting locked state on the next keypad poll (rearm)");
@@ -680,11 +683,15 @@ bool SwitchbotKeypadBridge::relay_to_lock_async_(const FrameHeader &header,
        this->session_.plaintext() + this->session_.plaintext_size()},
       command, millis()};
 
+  return this->enqueue_relay_job_(job);
+}
+
+bool SwitchbotKeypadBridge::enqueue_relay_job_(RelayJob *job) {
   std::lock_guard<std::mutex> lk(this->relay_mu_);
   if (!this->relay_accepting_) {
     if (this->lock_relay_busy_.load()) {
       delete job;
-      ESP_LOGW(TAG, "Lock relay still closing — answering this command locally");
+      ESP_LOGW(TAG, "Lock relay still closing — command not forwarded");
       return false;
     }
     if (!this->start_relay_worker_()) {
@@ -694,10 +701,46 @@ bool SwitchbotKeypadBridge::relay_to_lock_async_(const FrameHeader &header,
   }
   if (xQueueSend(this->relay_queue_, &job, 0) != pdTRUE) {
     delete job;
-    ESP_LOGW(TAG, "Lock relay queue full — answering this command locally");
+    ESP_LOGW(TAG, "Lock relay queue full — command not forwarded");
     return false;
   }
   return true;
+}
+
+// Frames as the keypad sends them (see lock_protocol.cpp / lock_session_test.cpp).
+// Unlock reuses the keypad's PIN frame (method 0x04, credential index 0) because
+// the lock only knows these frames; the lock's own log will attribute the unlock
+// to that credential.
+static constexpr uint8_t HA_FRAME_LOCK[8]   = {0x0F, 0x4E, 0x01, 0x03, 0x00, 0x00, 0x00, 0x00};
+static constexpr uint8_t HA_FRAME_UNLOCK[8] = {0x0F, 0x4E, 0x01, 0x03, 0x04, 0x80, 0x00, 0x00};
+
+bool SwitchbotKeypadBridge::send_lock_command_(CommandType type, const uint8_t *frame,
+                                               size_t length) {
+  if (!this->lock_linked_) {
+    ESP_LOGW(TAG, "Cannot operate the lock: no physical lock linked (use the setup wizard)");
+    return false;
+  }
+  DecodedCommand command;
+  command.type = type;
+  if (type == CommandType::UNLOCK) {
+    command.method = UnlockMethod::PIN;
+    command.credential_index = 0;
+  }
+  auto *job = new RelayJob{
+      this->physical_lock_config_(this->linked_lock_info_.slot_id),
+      {frame, frame + length},
+      command, millis()};
+  return this->enqueue_relay_job_(job);
+}
+
+bool SwitchbotKeypadBridge::unlock_lock() {
+  ESP_LOGI(TAG, "Unlock requested from Home Assistant / automation");
+  return this->send_lock_command_(CommandType::UNLOCK, HA_FRAME_UNLOCK, sizeof(HA_FRAME_UNLOCK));
+}
+
+bool SwitchbotKeypadBridge::lock_lock() {
+  ESP_LOGI(TAG, "Lock requested from Home Assistant / automation");
+  return this->send_lock_command_(CommandType::LOCK, HA_FRAME_LOCK, sizeof(HA_FRAME_LOCK));
 }
 
 void SwitchbotKeypadBridge::prewarm_lock_relay_() {

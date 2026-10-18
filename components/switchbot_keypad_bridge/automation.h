@@ -15,6 +15,24 @@ template<typename... Ts> class RearmAction : public Action<Ts...> {
   SwitchbotKeypadBridge *parent_;
 };
 
+template<typename... Ts> class UnlockAction : public Action<Ts...> {
+ public:
+  explicit UnlockAction(SwitchbotKeypadBridge *parent) : parent_(parent) {}
+  void play(const Ts &...x) override { this->parent_->unlock_lock(); }
+
+ protected:
+  SwitchbotKeypadBridge *parent_;
+};
+
+template<typename... Ts> class LockAction : public Action<Ts...> {
+ public:
+  explicit LockAction(SwitchbotKeypadBridge *parent) : parent_(parent) {}
+  void play(const Ts &...x) override { this->parent_->lock_lock(); }
+
+ protected:
+  SwitchbotKeypadBridge *parent_;
+};
+
 class LockTrigger : public Trigger<> {
  public:
   explicit LockTrigger(SwitchbotKeypadBridge *parent) {

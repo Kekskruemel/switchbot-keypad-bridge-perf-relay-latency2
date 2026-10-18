@@ -86,6 +86,14 @@ class SwitchbotKeypadBridge : public Component {
   // or publishing a Lock event. Safe to call from local ESPHome automations.
   void rearm();
 
+  // Operate the linked physical lock from Home Assistant / local automations,
+  // without a keypad. Sends the same plaintext frame the keypad would send,
+  // over the same shared key slot and the same relay worker. Returns false
+  // when no lock is linked or the relay could not be started/queued; true only
+  // means the command was queued — the outcome is logged by loop().
+  bool unlock_lock();
+  bool lock_lock();
+
   bool is_pairing_active() const { return this->pairing_ui_.is_running(); }
 
   // Forgets the linked keypad and lock, rotates the shared key in place and
@@ -161,6 +169,9 @@ class SwitchbotKeypadBridge : public Component {
   // one-shot background task. The keypad is never answered from this path;
   // relay completion is logged only.
   bool relay_to_lock_async_(const FrameHeader &header, const DecodedCommand &command);
+  // Builds a keypad-style frame on the main task and queues it for the relay
+  // worker (used by unlock_lock()/lock_lock()).
+  bool send_lock_command_(CommandType type, const uint8_t *frame, size_t length);
 
   // One keypad payload for the relay worker, snapshotted on the main task.
   struct RelayJob {
@@ -169,6 +180,8 @@ class SwitchbotKeypadBridge : public Component {
     DecodedCommand command;
     uint32_t queued_ms;
   };
+  // Takes ownership of job: starts the worker if needed and queues it.
+  bool enqueue_relay_job_(RelayJob *job);
   // Keypad connected: open the lock link now, while the keypad is still
   // reading the credential, so the command only needs one round trip.
   void prewarm_lock_relay_();
@@ -338,6 +351,17 @@ class SwitchbotKeypadBridge : public Component {
   uint8_t keypad_battery_advert_family_{0};
   bool lock_battery_advert_pending_{false};
   int lock_battery_advert_value_{-1};
+};
+
+// Home Assistant buttons that operate the linked physical lock.
+class UnlockButton : public button::Button, public Parented<SwitchbotKeypadBridge> {
+ protected:
+  void press_action() override;
+};
+
+class LockButton : public button::Button, public Parented<SwitchbotKeypadBridge> {
+ protected:
+  void press_action() override;
 };
 
 // Home Assistant reset button: forgets keypad and lock, rotates the shared key

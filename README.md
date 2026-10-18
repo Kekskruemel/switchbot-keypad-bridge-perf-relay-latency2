@@ -145,6 +145,31 @@ To stream logs at any time:
 esphome logs switchbot-keypad-bridge.yaml
 ```
 
+## 🔓 Locking / unlocking from Home Assistant
+
+With a physical lock linked, the bridge can operate it without a keypad. Add
+the optional buttons:
+
+```yaml
+switchbot_keypad_bridge:
+  unlock_button:
+    name: "Unlock"
+  lock_button:
+    name: "Lock"
+```
+
+or call the actions from any automation / template entity:
+
+```yaml
+- switchbot_keypad_bridge.unlock: keypad_bridge
+- switchbot_keypad_bridge.lock: keypad_bridge
+```
+
+The bridge sends the same frames a keypad sends (over the same shared key slot
+and relay path), so the lock records the unlock as a PIN unlock with credential
+index 0. The result is only logged (`Physical lock relay confirmed Unlock`);
+the buttons do not report the lock's state back.
+
 ## 👤 Knowing who unlocked the door
 
 Every `on_unlock` trigger carries two values:
